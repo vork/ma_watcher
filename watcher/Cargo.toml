@@ -1,0 +1,7 @@
+[package]
+name = "watcher"
+version = "0.1.0"
+authors = ["boss"]
+description = "Setup a watch dogs for a specific folder and send the found files to processing."
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+name = "capture_watcher"
+version = "0.0.1"
+authors = ["Mark Boss <mark.boss@student.uni-tuebingen.de>"]
+description = "Executable programm which watches over a directory and checks all new raw images. Sends an error message, if an image is completely black."
+
+[workspace]
+
+[dependencies]
+tue-raw = { path = "tue-raw" }
+watcher = { path = "watcher" }

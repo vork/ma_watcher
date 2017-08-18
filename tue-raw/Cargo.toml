@@ -1,0 +1,7 @@
+[package]
+name = "tue-raw"
+version = "0.1.0"
+authors = ["boss"]
+description = "The raw format of the University Tuebingen"
+
+[dependencies]
