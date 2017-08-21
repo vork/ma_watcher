@@ -14,7 +14,8 @@ use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 type RawImage = ImageBuffer<Rgb<f32>, Vec<f32>>;
 pub struct Image {
     img: RawImage,
-    min_max: (f32, f32)
+    min_max: (f32, f32),
+    visible_min_max: (f32, f32)
 }
 
 #[inline]
@@ -147,7 +148,7 @@ impl Image {
 
         let img = ImageBuffer::from_raw(header.size.0, header.size.1, data).unwrap();
         let min_max = calculate_min_max(&img);
-        Image{ img: img, min_max: min_max }
+        Image{ img: img, min_max: min_max, visible_min_max: min_max }
     }
 
     pub fn set_clamp_percentage(&mut self, min_perc: f32, max_perc: f32) {
@@ -160,7 +161,7 @@ impl Image {
         let n_min = range * min_perc + self.min_max.0;
         let n_max = range * max_perc + self.min_max.0;
 
-        self.min_max = (n_min, n_max);
+        self.visible_min_max = (n_min, n_max);
     }
 
     pub fn save_as_png(&self, out: &str) {
@@ -168,7 +169,7 @@ impl Image {
 
         for cp in self.img.enumerate_pixels() {
             let mut p = cp.2.clone();
-            p.apply(|v| (v - self.min_max.0) / (self.min_max.1 - self.min_max.0) * 255f32);
+            p.apply(|v| (v - self.visible_min_max.0) / (self.visible_min_max.1 - self.visible_min_max.0) * 255f32);
             p.apply(|v| v.max(0.0f32).min(255.0f32)); //Clamp
             imgbuf.put_pixel(cp.0, cp.1, image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] });
         }

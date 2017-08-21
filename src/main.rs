@@ -15,7 +15,7 @@ pub fn main() {
 
     println!("Image read");
 
-    img.set_clamp_percentage(0.0, 0.05);
+    img.set_clamp_percentage(0.0, 0.0125);
 
     img.save_as_png("../hdr.png");
 
