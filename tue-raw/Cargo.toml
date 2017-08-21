@@ -6,6 +6,7 @@ description = "The raw format of the University Tuebingen"
 
 [dependencies]
 image = "0.15.0"
+byteorder = "1.1.0"
 
 [dependencies.nom]
 version = "3.2.0"

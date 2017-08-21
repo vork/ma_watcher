@@ -11,5 +11,13 @@ pub fn main() {
         panic!("Only one argument is allowed!");
     }
 
-    Image::read_img(&args[1]);
+    let mut img = Image::read_img(&args[1]);
+
+    println!("Image read");
+
+    img.calculate_clamp_range(0.0, 0.05);
+
+    img.save_as_png("../hdr.png");
+
+    println!("Done");
 }

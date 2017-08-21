@@ -1,21 +1,25 @@
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs::File;
+use std::path::Path;
+use std::io::Cursor;
 use std::str;
 use std::str::FromStr;
+
 use nom::{IResult,digit};
+use image;
+use image::{ImageBuffer, Rgb, RgbImage, Pixel};
+use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 
-use std::str::{from_utf8_unchecked};
-
+type RawImage = ImageBuffer<Rgb<f32>, Vec<f32>>;
 pub struct Image {
-    base_file_name: String,
-    size: (u32, u32),
-    data: Vec<[f32; 3]>
+    img: RawImage,
+    min_max: (f32, f32)
 }
 
 #[inline]
 fn bytes_to_str(bytes: &[u8]) -> &str {
-  unsafe { from_utf8_unchecked(bytes) }
+  unsafe { str::from_utf8_unchecked(bytes) }
 }
 
 #[inline]
@@ -90,9 +94,26 @@ named!(header_parser<Header>,
     )
 );
 
+fn calculate_min_max(img: &RawImage) -> (f32, f32) {
+    let mut min = 1f32;
+    let mut max = 0f32;
+
+    for p in img.pixels() {
+        for c in 0..3 {
+            if min > p[c] {
+                min = p[c];
+            }
+            if max < p[c] {
+                max = p[c];
+            }
+        }
+    }
+
+    (min, max)
+}
 
 impl Image {
-    pub fn read_img(path: &str) {
+    pub fn read_img(path: &str) -> Self {
         let mut f = File::open(path).unwrap();
         let mut reader = BufReader::new(f);
 
@@ -111,8 +132,49 @@ impl Image {
 
         println!("{:?}", header);
 
-        println!("Done");
+        let mut data: Vec<f32> = Vec::with_capacity((header.size.0 * header.size.1 * header.buffer_channels as u32) as usize);
 
-        
+        for y in 0..header.size.1 {
+            for x in 0..header.size.0 {
+                let mut buffer = [0u8; 12];
+                reader.read_exact(&mut buffer);
+
+                data.push(Cursor::new(vec![buffer[0], buffer[1], buffer[2], buffer[3]]).read_f32::<BigEndian>().unwrap());
+                data.push(Cursor::new(vec![buffer[4], buffer[5], buffer[6], buffer[7]]).read_f32::<BigEndian>().unwrap());
+                data.push(Cursor::new(vec![buffer[8], buffer[9], buffer[10], buffer[11]]).read_f32::<BigEndian>().unwrap());
+            }
+        }
+
+        let img = ImageBuffer::from_raw(header.size.0, header.size.1, data).unwrap();
+        let min_max = calculate_min_max(&img);
+        Image{ img: img, min_max: min_max }
+    }
+
+    pub fn calculate_clamp_range(&mut self, min_perc: f32, max_perc: f32) {
+        if min_perc < 0.0f32 || min_perc > 1.0f32 ||
+                max_perc < 0.0f32 || min_perc > 1.0f32 ||
+                min_perc > max_perc {
+            panic!{"Percentages must be between 0.0 and 1.0 and min can't be larger than max"};
+        }
+        let range = self.min_max.1 - self.min_max.0;
+        let n_min = range * min_perc + self.min_max.0;
+        let n_max = range * max_perc + self.min_max.0;
+
+        self.min_max = (n_min, n_max);
+    }
+
+    pub fn save_as_png(&self, out: &str) {
+        let mut imgbuf = RgbImage::new(self.img.width(), self.img.height());
+
+        for cp in self.img.enumerate_pixels() {
+            let mut p = cp.2.clone();
+            p.apply(|v| (v - self.min_max.0) / (self.min_max.1 - self.min_max.0) * 255f32);
+            p.apply(|v| v.max(0.0f32).min(255.0f32)); //Clamp
+            imgbuf.put_pixel(cp.0, cp.1, image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] });
+        }
+
+        let ref mut fout = File::create(&Path::new(out)).unwrap();
+
+        let _ = image::ImageRgb8(imgbuf).save(fout, image::PNG);
     }
 }
