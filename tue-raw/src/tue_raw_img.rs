@@ -150,7 +150,7 @@ impl Image {
         Image{ img: img, min_max: min_max }
     }
 
-    pub fn calculate_clamp_range(&mut self, min_perc: f32, max_perc: f32) {
+    pub fn set_clamp_percentage(&mut self, min_perc: f32, max_perc: f32) {
         if min_perc < 0.0f32 || min_perc > 1.0f32 ||
                 max_perc < 0.0f32 || min_perc > 1.0f32 ||
                 min_perc > max_perc {
