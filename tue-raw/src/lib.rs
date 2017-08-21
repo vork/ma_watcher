@@ -1,10 +1,4 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-    }
-}
+#[macro_use]
+extern crate nom;
 
-pub fn raw_test() {
-    println!("Raw works");
-}
+pub mod tue_raw_img;
