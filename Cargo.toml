@@ -8,4 +8,5 @@ description = "Executable programm which watches over a directory and checks all
 
 [dependencies]
 tue-raw = { path = "tue-raw" }
-watcher = { path = "watcher" }
+pshbullet_client = "0.2.0"
+notify = "4.0.1"

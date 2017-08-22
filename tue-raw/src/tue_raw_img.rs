@@ -8,12 +8,13 @@ use std::str::FromStr;
 
 use nom::{IResult,digit};
 use image;
-use image::{ImageBuffer, Rgb, RgbImage, Pixel};
+use image::{ImageBuffer, Rgb, Luma, RgbImage, GrayImage, Pixel};
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 
 type RawImage = ImageBuffer<Rgb<f32>, Vec<f32>>;
 pub struct Image {
     img: RawImage,
+    header: Header,
     min_max: (f32, f32),
     visible_min_max: (f32, f32)
 }
@@ -113,6 +114,21 @@ fn calculate_min_max(img: &RawImage) -> (f32, f32) {
     (min, max)
 }
 
+enum RgbOrGrayImage {
+    RgbImage,
+    GrayImage
+}
+
+enum GrayOrRgb8 {
+    Rgb<u8>,
+    Luma<u8>,
+}
+
+enum ImageRgbOrGray8 {
+    image::ImageRgb8,
+    image::ImageLuma8
+}
+
 impl Image {
     pub fn read_img(path: &str) -> Self {
         let mut f = File::open(path).unwrap();
@@ -137,18 +153,22 @@ impl Image {
 
         for y in 0..header.size.1 {
             for x in 0..header.size.0 {
-                let mut buffer = [0u8; 12];
+                let mut buffer = match header.buffer_channels {
+                    3 => vec![0u8; 12].into_boxed_slice(),
+                    1 => vec![0u8; 4].into_boxed_slice(),
+                    _ => panic!("Only 1 or 3 channels is supported!"),
+                };
                 reader.read_exact(&mut buffer);
 
-                data.push(Cursor::new(vec![buffer[0], buffer[1], buffer[2], buffer[3]]).read_f32::<BigEndian>().unwrap());
-                data.push(Cursor::new(vec![buffer[4], buffer[5], buffer[6], buffer[7]]).read_f32::<BigEndian>().unwrap());
-                data.push(Cursor::new(vec![buffer[8], buffer[9], buffer[10], buffer[11]]).read_f32::<BigEndian>().unwrap());
+                for c in 0..header.buffer_channels {
+                    data.push(Cursor::new(vec![buffer[c as usize], buffer[(c + 1) as usize], buffer[(c + 2) as usize], buffer[(c + 3) as usize]]).read_f32::<BigEndian>().unwrap());
+                }
             }
         }
 
         let img = ImageBuffer::from_raw(header.size.0, header.size.1, data).unwrap();
         let min_max = calculate_min_max(&img);
-        Image{ img: img, min_max: min_max, visible_min_max: min_max }
+        Image{ img: img, header: header, min_max: min_max, visible_min_max: min_max }
     }
 
     pub fn set_clamp_percentage(&mut self, min_perc: f32, max_perc: f32) {
@@ -165,17 +185,34 @@ impl Image {
     }
 
     pub fn save_as_png(&self, out: &str) {
-        let mut imgbuf = RgbImage::new(self.img.width(), self.img.height());
+        let mut imgbuf = match self.header.buffer_channels {
+            3 => RgbImage::new(self.img.width(), self.img.height()),
+            1 => GrayImage::new(self.img.width(), self.img.height()),
+            _ => panic!("Only 3 or channels is supported!"),
+        };
 
         for cp in self.img.enumerate_pixels() {
             let mut p = cp.2.clone();
             p.apply(|v| (v - self.visible_min_max.0) / (self.visible_min_max.1 - self.visible_min_max.0) * 255f32);
             p.apply(|v| v.max(0.0f32).min(255.0f32)); //Clamp
-            imgbuf.put_pixel(cp.0, cp.1, image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] });
+            imgbuf.put_pixel(cp.0, cp.1,
+                match self.header.buffer_channels {
+                    3 => image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] },
+                    1 => image::Luma{ data: [p[0] as u8] },
+                    _ => panic!("Only 3 or channels is supported!"),
+            });
         }
 
         let ref mut fout = File::create(&Path::new(out)).unwrap();
 
-        let _ = image::ImageRgb8(imgbuf).save(fout, image::PNG);
+        match self.header.buffer_channels {
+                3 => image::ImageRgb8(imgbuf).save(fout, image::PNG),
+                1 => image::ImageLuma8(imgbuf).save(fout, image::PNG),
+                _ => panic!("Only 3 or channels is supported!"),
+        };
+    }
+
+    pub fn get_min_max(&self) -> (f32, f32) {
+        self.min_max
     }
 }
