@@ -114,21 +114,6 @@ fn calculate_min_max(img: &RawImage) -> (f32, f32) {
     (min, max)
 }
 
-enum RgbOrGrayImage {
-    RgbImage,
-    GrayImage
-}
-
-enum GrayOrRgb8 {
-    Rgb<u8>,
-    Luma<u8>,
-}
-
-enum ImageRgbOrGray8 {
-    image::ImageRgb8,
-    image::ImageLuma8
-}
-
 impl Image {
     pub fn read_img(path: &str) -> Self {
         let mut f = File::open(path).unwrap();
@@ -185,29 +170,25 @@ impl Image {
     }
 
     pub fn save_as_png(&self, out: &str) {
-        let mut imgbuf = match self.header.buffer_channels {
-            3 => RgbImage::new(self.img.width(), self.img.height()),
-            1 => GrayImage::new(self.img.width(), self.img.height()),
-            _ => panic!("Only 3 or channels is supported!"),
-        };
+        let mut imgbufRgb = RgbImage::new(self.img.width(), self.img.height());
+        let mut imgbufLuma = GrayImage::new(self.img.width(), self.img.height());
 
         for cp in self.img.enumerate_pixels() {
             let mut p = cp.2.clone();
             p.apply(|v| (v - self.visible_min_max.0) / (self.visible_min_max.1 - self.visible_min_max.0) * 255f32);
             p.apply(|v| v.max(0.0f32).min(255.0f32)); //Clamp
-            imgbuf.put_pixel(cp.0, cp.1,
-                match self.header.buffer_channels {
-                    3 => image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] },
-                    1 => image::Luma{ data: [p[0] as u8] },
-                    _ => panic!("Only 3 or channels is supported!"),
-            });
+            match self.header.buffer_channels {
+                3 => imgbufRgb.put_pixel(cp.0, cp.1, image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] }),
+                1 => imgbufLuma.put_pixel(cp.0, cp.1,image::Luma{ data: [p[0] as u8] }),
+                _ => panic!("Only 3 or channels is supported!"),
+            };
         }
 
         let ref mut fout = File::create(&Path::new(out)).unwrap();
 
         match self.header.buffer_channels {
-                3 => image::ImageRgb8(imgbuf).save(fout, image::PNG),
-                1 => image::ImageLuma8(imgbuf).save(fout, image::PNG),
+                3 => image::ImageRgb8(imgbufRgb).save(fout, image::PNG),
+                1 => image::ImageLuma8(imgbufLuma).save(fout, image::PNG),
                 _ => panic!("Only 3 or channels is supported!"),
         };
     }

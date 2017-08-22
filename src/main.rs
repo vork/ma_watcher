@@ -1,6 +1,6 @@
 extern crate tue_raw;
-extern crate watcher;
 extern crate pshbullet_client;
+extern crate notify;
 
 use std::env;
 
@@ -11,7 +11,6 @@ use pshbullet_client::*;
 use pshbullet_client::push::*;
 
 use tue_raw::tue_raw_img::Image;
-use watcher::NewFileIterator;
 
 pub fn main() {
     let args: Vec<_> = env::args().collect();
