@@ -1,8 +1,8 @@
+use std::io;
 use std::io::prelude::*;
-use std::io::BufReader;
+use std::io::{BufReader, Cursor};
 use std::fs::File;
 use std::path::Path;
-use std::io::Cursor;
 use std::str;
 use std::str::FromStr;
 
@@ -114,46 +114,63 @@ fn calculate_min_max(img: &RawImage) -> (f32, f32) {
     (min, max)
 }
 
+pub enum ImageReadError {
+    ImageParseError,
+    HeaderParseError,
+}
+
+impl From<io::Error> for ImageReadError {
+    fn from(e: io::Error) -> ImageReadError {
+        ImageReadError::ImageParseError
+    }
+}
+
 impl Image {
-    pub fn read_img(path: &str) -> Self {
+    pub fn read_img(path: &str) -> Result<Image, ImageReadError> {
         let mut f = File::open(path).unwrap();
         let mut reader = BufReader::new(f);
 
         let mut line = String::new();
-        let mut len = reader.read_line(&mut line).unwrap(); //Intro
-        len = reader.read_line(&mut line).unwrap(); //Filename
-        len = reader.read_line(&mut line).unwrap(); //FileID
-        len = reader.read_line(&mut line).unwrap(); //Dimensions
-        len = reader.read_line(&mut line).unwrap(); //Size
-        len = reader.read_line(&mut line).unwrap(); //Buffer Channels
-        len = reader.read_line(&mut line).unwrap(); //PrimType
-        len = reader.read_line(&mut line).unwrap(); //Buffer Type
-        len = reader.read_line(&mut line).unwrap(); //END
+        let mut len = try!(reader.read_line(&mut line)); //Intro
+        len = try!(reader.read_line(&mut line)); //Filename
+        len = try!(reader.read_line(&mut line)); //FileID
+        len = try!(reader.read_line(&mut line)); //Dimensions
+        len = try!(reader.read_line(&mut line)); //Size
+        len = try!(reader.read_line(&mut line)); //Buffer Channels
+        len = try!(reader.read_line(&mut line)); //PrimType
+        len = try!(reader.read_line(&mut line)); //Buffer Type
+        len = try!(reader.read_line(&mut line)); //END
 
-        let (_, header) = header_parser(line.as_bytes()).unwrap();
+        if let Ok(header) = match header_parser(line.as_bytes()) {
+            IResult::Done(_, o) => Ok(o),
+            IResult::Error(_) => Err(ImageReadError::HeaderParseError),
+            _ => Err(ImageReadError::HeaderParseError),
+        } {
+            println!("{:?}", header);
 
-        println!("{:?}", header);
+            let mut data: Vec<f32> = Vec::with_capacity((header.size.0 * header.size.1 * header.buffer_channels as u32) as usize);
 
-        let mut data: Vec<f32> = Vec::with_capacity((header.size.0 * header.size.1 * header.buffer_channels as u32) as usize);
+            for y in 0..header.size.1 {
+                for x in 0..header.size.0 {
+                    let mut buffer = match header.buffer_channels {
+                        3 => vec![0u8; 12].into_boxed_slice(),
+                        1 => vec![0u8; 4].into_boxed_slice(),
+                        _ => panic!("Only 1 or 3 channels is supported!"),
+                    };
+                    reader.read_exact(&mut buffer);
 
-        for y in 0..header.size.1 {
-            for x in 0..header.size.0 {
-                let mut buffer = match header.buffer_channels {
-                    3 => vec![0u8; 12].into_boxed_slice(),
-                    1 => vec![0u8; 4].into_boxed_slice(),
-                    _ => panic!("Only 1 or 3 channels is supported!"),
-                };
-                reader.read_exact(&mut buffer);
-
-                for c in 0..header.buffer_channels {
-                    data.push(Cursor::new(vec![buffer[c as usize], buffer[(c + 1) as usize], buffer[(c + 2) as usize], buffer[(c + 3) as usize]]).read_f32::<BigEndian>().unwrap());
+                    for c in 0..header.buffer_channels {
+                        data.push(Cursor::new(vec![buffer[c as usize], buffer[(c + 1) as usize], buffer[(c + 2) as usize], buffer[(c + 3) as usize]]).read_f32::<BigEndian>().unwrap());
+                    }
                 }
             }
-        }
 
-        let img = ImageBuffer::from_raw(header.size.0, header.size.1, data).unwrap();
-        let min_max = calculate_min_max(&img);
-        Image{ img: img, header: header, min_max: min_max, visible_min_max: min_max }
+            let img = ImageBuffer::from_raw(header.size.0, header.size.1, data).unwrap();
+            let min_max = calculate_min_max(&img);
+            return Ok(Image{ img: img, header: header, min_max: min_max, visible_min_max: min_max });
+        } else {
+            return Err(ImageReadError::HeaderParseError);
+        }        
     }
 
     pub fn set_clamp_percentage(&mut self, min_perc: f32, max_perc: f32) {

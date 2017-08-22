@@ -14,12 +14,9 @@ use tue_raw::tue_raw_img::Image;
 
 pub fn main() {
     let args: Vec<_> = env::args().collect();
-
-    println!("{:?}", args);
     if args.len() > 3 {
         panic!("Only two arguments is allowed!");
     }
-
     //Arguments are: 
     //1: Pushbullet API token
     //2: Folder to watch
@@ -29,12 +26,6 @@ pub fn main() {
     let target = Target::Broadcast;
     let mut client: Option<PushbulletClient> = None;
     if args.len() > 2 {
-        let img_num = 1;
-        let note_request = Request::Note {
-            title: "Captured empty image!",
-            body: &format!("Faulty image: {}", img_num)
-        };
-
         client = Some(PushbulletClient::new(String::from(args[2].clone())));
         path_arg = 2;
     }
@@ -57,19 +48,41 @@ pub fn main() {
         };
 
         if let Some(p) = path {
-            
+            if let Some(ext) = p.extension() {
+                if ext == "raw" {
+                    if let Some(path) = p.to_str() {
+                        if let Ok(img) = Image::read_img(path) {
+                            let (_, max) = img.get_min_max();
+                            if max == 0f32 { //No data in image?!
+                                let note_request = Request::Note {
+                                    title: "Captured dark image!",
+                                    body: &format!("Faulty image: {}", path)
+                                };
+                                match client {
+                                    Some(ref cli) => {
+                                        cli.create_push(&target, note_request).unwrap();
+                                    },
+                                    None => println!("{:?}", note_request),
+                                }
+                                
+                            }
+                        } else { //Image couldn't be parsed?!
+                            let note_request = Request::Note {
+                                title: "Image couldn't be read!",
+                                body: &format!("Faulty image: {}", path)
+                            };
+                            match client {
+                                Some(ref cli) => {
+                                    cli.create_push(&target, note_request).unwrap();
+                                },
+                                None => println!("{:?}", note_request),
+                            }
+                        }
+                    }
+                }
+            }   
         }
     }
 
     println!("Done");
-
-    /*let mut img = Image::read_img(&args[1]);
-
-    println!("Image read");
-
-    img.set_clamp_percentage(0.0, 0.0125);
-
-    img.save_as_png("../hdr.png");
-
-    println!("Done");*/
 }
