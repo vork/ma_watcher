@@ -26,7 +26,7 @@ pub fn main() {
     let target = Target::Broadcast;
     let mut client: Option<PushbulletClient> = None;
     if args.len() > 2 {
-        client = Some(PushbulletClient::new(String::from(args[2].clone())));
+        client = Some(PushbulletClient::new(String::from(args[1].clone())));
         path_arg = 2;
     }
 
@@ -40,7 +40,7 @@ pub fn main() {
         let path = match rx.recv() {
             Ok(event) => {
                 match event {
-                    DebouncedEvent::Write(path) => Some(path),
+                    DebouncedEvent::Create(path) | DebouncedEvent::Write(path) => Some(path),
                     _ => None,
                 }
             },
@@ -82,7 +82,5 @@ pub fn main() {
                 }
             }   
         }
-    }
-
-    println!("Done");
+    }\
 }
