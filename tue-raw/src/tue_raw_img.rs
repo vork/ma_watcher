@@ -6,10 +6,10 @@ use std::path::Path;
 use std::str;
 use std::str::FromStr;
 
-use nom::{IResult,digit};
+use nom::IResult;
 use image;
-use image::{ImageBuffer, Rgb, Luma, RgbImage, GrayImage, Pixel};
-use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
+use image::{ImageBuffer, Rgb, RgbImage, GrayImage, Pixel};
+use byteorder::{ReadBytesExt, BigEndian};
 
 type RawImage = ImageBuffer<Rgb<f32>, Vec<f32>>;
 pub struct Image {
@@ -17,16 +17,6 @@ pub struct Image {
     header: Header,
     min_max: (f32, f32),
     visible_min_max: (f32, f32)
-}
-
-#[inline]
-fn bytes_to_str(bytes: &[u8]) -> &str {
-  unsafe { str::from_utf8_unchecked(bytes) }
-}
-
-#[inline]
-fn bytes_to_string(bytes: &[u8]) -> String {
-  bytes_to_str(bytes).to_owned()
 }
 
 #[derive(Debug)]
@@ -119,27 +109,28 @@ pub enum ImageReadError {
     HeaderParseError,
 }
 
+// TODO send the error too
 impl From<io::Error> for ImageReadError {
-    fn from(e: io::Error) -> ImageReadError {
+    fn from(_: io::Error) -> ImageReadError {
         ImageReadError::ImageParseError
     }
 }
 
 impl Image {
     pub fn read_img(path: &str) -> Result<Image, ImageReadError> {
-        let mut f = File::open(path).unwrap();
+        let f = File::open(path).unwrap();
         let mut reader = BufReader::new(f);
 
         let mut line = String::new();
-        let mut len = try!(reader.read_line(&mut line)); //Intro
-        len = try!(reader.read_line(&mut line)); //Filename
-        len = try!(reader.read_line(&mut line)); //FileID
-        len = try!(reader.read_line(&mut line)); //Dimensions
-        len = try!(reader.read_line(&mut line)); //Size
-        len = try!(reader.read_line(&mut line)); //Buffer Channels
-        len = try!(reader.read_line(&mut line)); //PrimType
-        len = try!(reader.read_line(&mut line)); //Buffer Type
-        len = try!(reader.read_line(&mut line)); //END
+        try!(reader.read_line(&mut line)); //Intro
+        try!(reader.read_line(&mut line)); //Filename
+        try!(reader.read_line(&mut line)); //FileID
+        try!(reader.read_line(&mut line)); //Dimensions
+        try!(reader.read_line(&mut line)); //Size
+        try!(reader.read_line(&mut line)); //Buffer Channels
+        try!(reader.read_line(&mut line)); //PrimType
+        try!(reader.read_line(&mut line)); //Buffer Type
+        try!(reader.read_line(&mut line)); //END
 
         if let Ok(header) = match header_parser(line.as_bytes()) {
             IResult::Done(_, o) => Ok(o),
@@ -150,14 +141,14 @@ impl Image {
 
             let mut data: Vec<f32> = Vec::with_capacity((header.size.0 * header.size.1 * header.buffer_channels as u32) as usize);
 
-            for y in 0..header.size.1 {
-                for x in 0..header.size.0 {
+            for _ in 0..header.size.1 {
+                for _ in 0..header.size.0 {
                     let mut buffer = match header.buffer_channels {
                         3 => vec![0u8; 12].into_boxed_slice(),
                         1 => vec![0u8; 4].into_boxed_slice(),
                         _ => panic!("Only 1 or 3 channels is supported!"),
                     };
-                    reader.read_exact(&mut buffer);
+                    try!(reader.read_exact(&mut buffer));
 
                     for c in 0..header.buffer_channels {
                         data.push(Cursor::new(vec![buffer[c as usize], buffer[(c + 1) as usize], buffer[(c + 2) as usize], buffer[(c + 3) as usize]]).read_f32::<BigEndian>().unwrap());
@@ -187,16 +178,16 @@ impl Image {
     }
 
     pub fn save_as_png(&self, out: &str) {
-        let mut imgbufRgb = RgbImage::new(self.img.width(), self.img.height());
-        let mut imgbufLuma = GrayImage::new(self.img.width(), self.img.height());
+        let mut imgbuf_rgb = RgbImage::new(self.img.width(), self.img.height());
+        let mut imgbuf_luma = GrayImage::new(self.img.width(), self.img.height());
 
         for cp in self.img.enumerate_pixels() {
             let mut p = cp.2.clone();
             p.apply(|v| (v - self.visible_min_max.0) / (self.visible_min_max.1 - self.visible_min_max.0) * 255f32);
             p.apply(|v| v.max(0.0f32).min(255.0f32)); //Clamp
             match self.header.buffer_channels {
-                3 => imgbufRgb.put_pixel(cp.0, cp.1, image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] }),
-                1 => imgbufLuma.put_pixel(cp.0, cp.1,image::Luma{ data: [p[0] as u8] }),
+                3 => imgbuf_rgb.put_pixel(cp.0, cp.1, image::Rgb{ data: [p[0] as u8, p[1] as u8, p[2] as u8] }),
+                1 => imgbuf_luma.put_pixel(cp.0, cp.1,image::Luma{ data: [p[0] as u8] }),
                 _ => panic!("Only 3 or channels is supported!"),
             };
         }
@@ -204,10 +195,10 @@ impl Image {
         let ref mut fout = File::create(&Path::new(out)).unwrap();
 
         match self.header.buffer_channels {
-                3 => image::ImageRgb8(imgbufRgb).save(fout, image::PNG),
-                1 => image::ImageLuma8(imgbufLuma).save(fout, image::PNG),
+                3 => image::ImageRgb8(imgbuf_rgb).save(fout, image::PNG),
+                1 => image::ImageLuma8(imgbuf_luma).save(fout, image::PNG),
                 _ => panic!("Only 3 or channels is supported!"),
-        };
+        }.unwrap();
     }
 
     pub fn get_min_max(&self) -> (f32, f32) {

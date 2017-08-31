@@ -5,7 +5,7 @@ extern crate notify;
 use std::env;
 
 use notify::{RecommendedWatcher, Watcher, DebouncedEvent, RecursiveMode};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use std::time::Duration;
 use pshbullet_client::*;
 use pshbullet_client::push::*;
@@ -82,5 +82,5 @@ pub fn main() {
                 }
             }   
         }
-    }\
+    }
 }
